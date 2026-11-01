@@ -1506,6 +1506,31 @@
           "fair": "Orta",
           "good": "İyi",
           "strong": "Güçlü"
+        },
+        "usage": {
+          "loading": "Kullanım yükleniyor…",
+          "none": "Henüz kullanım yok",
+          "summary": "{{tokens}} token · {{requests}} istek",
+          "details": "Kullanım",
+          "details_title": "API anahtarı kullanımı",
+          "since": "{{date}} tarihinden beri sayılıyor",
+          "last_used": "Son kullanım: {{date}}",
+          "disabled_hint": "Token sayımı kapalı. Yeni istekleri saymak için günlük ayarlarında \"Bellek İçi Kullanım İstatistiklerini Etkinleştir\" seçeneğini açıp kaydedin.",
+          "total_tokens": "Toplam token",
+          "input_tokens": "Girdi tokenları",
+          "output_tokens": "Çıktı tokenları",
+          "reasoning_tokens": "Akıl yürütme tokenları",
+          "cached_tokens": "Önbellekteki tokenlar",
+          "requests": "İstekler",
+          "success": "Başarılı",
+          "failed": "Başarısız",
+          "models": "Modele göre",
+          "model": "Model",
+          "reset": "Sayacı sıfırla",
+          "reset_confirm_title": "Kullanım sayacı sıfırlansın mı?",
+          "reset_confirm_message": "Bu işlem bu API anahtarının istek ve token sayılarını sıfırlar. Geri alınamaz.",
+          "reset_done": "Kullanım sayacı sıfırlandı",
+          "reset_failed": "Kullanım sayacı sıfırlanamadı"
         }
       },
       "payload_rules": {

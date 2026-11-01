@@ -220,6 +220,91 @@
   white-space: nowrap;
 }
 
+/* 用量摘要：次要信息，等宽数字便于逐行对比。 */
+.apiKeyUsage {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.apiKeyUsageDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.apiKeyUsageStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  margin: 0;
+
+  dt {
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  dd {
+    margin: 2px 0 0;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.apiKeyUsageStat {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.apiKeyUsageModelsScroll {
+  overflow-x: auto;
+}
+
+.apiKeyUsageModels {
+  width: 100%;
+  /* 窄屏下整表横向滚动，而不是把模型名逐字折断。 */
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+
+  caption {
+    padding-bottom: 6px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  th,
+  td {
+    padding: 6px 8px;
+    border-top: 1px solid var(--border-color);
+    text-align: right;
+  }
+
+  thead th {
+    white-space: nowrap;
+  }
+
+  th:first-child {
+    min-width: 140px;
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+    font-weight: 500;
+    text-align: left;
+  }
+
+  thead th {
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
+}
+
 .apiKeyActions {
   display: flex;
   align-self: center;
