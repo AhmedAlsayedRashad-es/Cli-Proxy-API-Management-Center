@@ -1,6 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
+import { fileURLToPath } from 'node:url';
 
 // Separate processes keep timezone changes out of the other rendering suites.
+// A cold Bun process that loads React and every locale can exceed the 5 s default
+// on slower machines (notably Windows under a full parallel test run).
+setDefaultTimeout(60_000);
+
 const cases: { zone: string; date: number[]; hours: number; startHour?: number }[] = [
   { zone: 'Europe/Paris', date: [2026, 9, 25], hours: 25 },
   { zone: 'Europe/Paris', date: [2026, 2, 29], hours: 23 },
@@ -65,7 +70,7 @@ for (const { zone, date, hours, startHour = 0 } of cases) {
           console.log(JSON.stringify(output));
         `,
       ],
-      cwd: new URL('..', import.meta.url).pathname,
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
       env: { ...process.env, TZ: zone },
       stdout: 'pipe',
       stderr: 'pipe',

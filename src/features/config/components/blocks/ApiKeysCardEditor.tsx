@@ -10,6 +10,8 @@ import { generateSecureApiKey } from '@/utils/apiKey';
 import { maskApiKey } from '@/utils/format';
 import { isValidApiKeyCharset } from '@/utils/validation';
 import { ApiKeyStrengthMeter } from './ApiKeyStrengthMeter';
+import { ApiKeyUsageDetails, ApiKeyUsageSummary } from './ApiKeyUsage';
+import { useClientKeyUsage } from '../../hooks/useClientKeyUsage';
 import styles from './Blocks.module.scss';
 
 interface ApiKeysCardEditorProps {
@@ -64,6 +66,10 @@ function ScopedApiKeysCardEditor({
   const [editingApiKeyId, setEditingApiKeyId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [formError, setFormError] = useState('');
+  const usage = useClientKeyUsage();
+  const [usageKey, setUsageKey] = useState<string | null>(null);
+  const [resettingUsage, setResettingUsage] = useState(false);
+  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
 
   const openAddModal = () => {
     setNameValue('');
@@ -141,6 +147,26 @@ function ScopedApiKeysCardEditor({
     );
   };
 
+  const handleResetUsage = (apiKey: string) => {
+    showConfirmation({
+      title: t('config_management.visual.api_keys.usage.reset_confirm_title'),
+      message: t('config_management.visual.api_keys.usage.reset_confirm_message'),
+      confirmText: t('config_management.visual.api_keys.usage.reset'),
+      variant: 'danger',
+      onConfirm: async () => {
+        setResettingUsage(true);
+        try {
+          await usage.reset(apiKey);
+          showNotification(t('config_management.visual.api_keys.usage.reset_done'), 'success');
+        } catch {
+          showNotification(t('config_management.visual.api_keys.usage.reset_failed'), 'error');
+        } finally {
+          setResettingUsage(false);
+        }
+      },
+    });
+  };
+
   const handleGenerate = () => {
     setInputValue(generateSecureApiKey());
     setFormError('');
@@ -154,6 +180,11 @@ function ScopedApiKeysCardEditor({
             {t('config_management.visual.api_keys.label')}
           </span>
           <span className={styles.apiKeysHint}>{t('config_management.visual.api_keys.hint')}</span>
+          {usage.report && !usage.report.enabled && (
+            <span className={styles.apiKeysHint}>
+              {t('config_management.visual.api_keys.usage.disabled_hint')}
+            </span>
+          )}
         </div>
         <Button size="sm" onClick={openAddModal} disabled={disabled}>
           {t('config_management.visual.api_keys.add')}
@@ -173,8 +204,14 @@ function ScopedApiKeysCardEditor({
                     t('config_management.visual.api_keys.input_label')}
                 </span>
                 <span className={styles.apiKeyValue}>{maskApiKey(String(key || ''))}</span>
+                <ApiKeyUsageSummary status={usage.status} usage={usage.report?.keys[key]} />
               </span>
               <span className={styles.apiKeyActions}>
+                {usage.status !== 'unavailable' && (
+                  <Button variant="ghost" size="sm" onClick={() => setUsageKey(key)}>
+                    {t('config_management.visual.api_keys.usage.details')}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -277,6 +314,44 @@ function ScopedApiKeysCardEditor({
             </div>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        open={usageKey !== null}
+        onClose={() => setUsageKey(null)}
+        width={640}
+        title={
+          usageKey === null
+            ? t('config_management.visual.api_keys.usage.details_title')
+            : `${t('config_management.visual.api_keys.usage.details_title')} · ${
+                names[apiKeyNameFingerprint(apiBase, usageKey)] ?? maskApiKey(usageKey)
+              }`
+        }
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => usageKey !== null && handleResetUsage(usageKey)}
+              disabled={
+                resettingUsage || usageKey === null || !usage.report?.keys[usageKey]?.requests
+              }
+            >
+              {t('config_management.visual.api_keys.usage.reset')}
+            </Button>
+            <Button variant="secondary" onClick={() => void usage.refresh()}>
+              {t('common.refresh')}
+            </Button>
+            <Button onClick={() => setUsageKey(null)}>{t('common.close')}</Button>
+          </>
+        }
+      >
+        {usageKey !== null && (
+          <ApiKeyUsageDetails
+            usage={usage.report?.keys[usageKey]}
+            since={usage.report?.since ?? null}
+            enabled={usage.report?.enabled ?? false}
+          />
+        )}
       </Modal>
     </div>
   );
