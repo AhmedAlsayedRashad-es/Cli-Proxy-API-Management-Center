@@ -22,10 +22,15 @@ export function ApiKeyUsageSummary({ status, usage }: ApiKeyUsageSummaryProps) {
   } else if (!usage || usage.requests === 0) {
     text = t('config_management.visual.api_keys.usage.none');
   } else {
+    const value = cost ? formatUsageCost(cost.total, i18n.language) : '';
     text = t('config_management.visual.api_keys.usage.summary', {
       tokens: formatCompactNumber(usage.totalTokens),
       cost: cost
-        ? formatUsageCost(cost.total, i18n.language)
+        ? cost.unpricedModels.length > 0
+          ? t('config_management.visual.api_keys.usage.partial_cost', { cost: value })
+          : cost.fallbackModels.length > 0
+            ? t('config_management.visual.api_keys.usage.fallback_cost', { cost: value })
+            : value
         : t('config_management.visual.api_keys.usage.cost_unavailable'),
     });
   }
@@ -51,6 +56,13 @@ export function ApiKeyUsageDetails({ usage, since, enabled }: ApiKeyUsageDetails
   const cost = usage ? estimateUsageCost(usage) : null;
   const money = (value: number | undefined) =>
     value === undefined ? t(key('cost_unavailable')) : formatUsageCost(value, i18n.language);
+  const bucketMoney = (value: number | undefined) => {
+    const formatted = money(value);
+    if (cost?.unpricedModels.length) return t(key('partial_cost'), { cost: formatted });
+    if (cost?.fallbackModels.length) return t(key('fallback_cost'), { cost: formatted });
+    return formatted;
+  };
+  const unpricedModels = cost?.unpricedModels ?? usage?.models.map((model) => model.model) ?? [];
   const stats = usage
     ? [
         { label: t(key('total_tokens')), value: usage.totalTokens, cost: cost?.total },
@@ -81,15 +93,29 @@ export function ApiKeyUsageDetails({ usage, since, enabled }: ApiKeyUsageDetails
         <>
           <div className={styles.apiKeyUsageCost}>
             <span>{t(key('api_cost'))}</span>
-            <strong>{money(cost?.total)}</strong>
+            <strong>{bucketMoney(cost?.total)}</strong>
           </div>
           <div className="hint">{t(key('cost_hint'))}</div>
+          {!!cost?.fallbackModels.length && (
+            <div className="hint">
+              {t(key('fallback_hint'), {
+                models: cost.fallbackModels
+                  .map(({ model, pricingModel }) => `${model} → ${pricingModel}`)
+                  .join(', '),
+              })}
+            </div>
+          )}
+          {unpricedModels.length > 0 && (
+            <div className="hint">
+              {t(key('unpriced_hint'), { models: unpricedModels.join(', ') })}
+            </div>
+          )}
           <dl className={styles.apiKeyUsageStats}>
             {stats.map((stat) => (
               <div key={stat.label} className={styles.apiKeyUsageStat}>
                 <dt>{stat.label}</dt>
                 <dd>{stat.value === undefined ? '?' : number(stat.value)}</dd>
-                <dd className={styles.apiKeyTokenCost}>{money(stat.cost)}</dd>
+                <dd className={styles.apiKeyTokenCost}>{bucketMoney(stat.cost)}</dd>
               </div>
             ))}
           </dl>
@@ -112,15 +138,21 @@ export function ApiKeyUsageDetails({ usage, since, enabled }: ApiKeyUsageDetails
                   </tr>
                 </thead>
                 <tbody>
-                  {usage.models.map((model) => (
-                    <tr key={model.model}>
-                      <th scope="row">{model.model}</th>
-                      <td>{money(estimateModelCost(model)?.total)}</td>
-                      <td>{number(model.inputTokens)}</td>
-                      <td>{number(model.outputTokens)}</td>
-                      <td>{number(model.totalTokens)}</td>
-                    </tr>
-                  ))}
+                  {usage.models.map((model) => {
+                    const modelCost = estimateModelCost(model);
+                    const value = money(modelCost?.total);
+                    return (
+                      <tr key={model.model}>
+                        <th scope="row">{model.model}</th>
+                        <td>
+                          {modelCost?.fallback ? t(key('fallback_cost'), { cost: value }) : value}
+                        </td>
+                        <td>{number(model.inputTokens)}</td>
+                        <td>{number(model.outputTokens)}</td>
+                        <td>{number(model.totalTokens)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

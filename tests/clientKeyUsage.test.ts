@@ -93,7 +93,12 @@ describe('ApiKeyUsage components', () => {
       createElement(ApiKeyUsageSummary, { status: 'ready', usage })
     );
     expect(markup).toContain('1.5K');
-    expect(markup).toContain(usageText('cost_unavailable'));
+    expect(markup).toContain(
+      escapeHtml(
+        i18n.t('config_management.visual.api_keys.usage.partial_cost', { cost: '$0.0053' })
+      )
+    );
+    expect(markup).not.toContain(usageText('cost_unavailable'));
     expect(markup).not.toContain('requests');
     expect(markup).toContain('data-usage-status="ready"');
   });
@@ -157,6 +162,49 @@ describe('ApiKeyUsage components', () => {
     expect(markup).toContain(usageText('disabled_hint'));
     expect(markup).toContain(usageText('none'));
   });
+
+  test('unlisted Haiku keeps all costs visible and discloses the fallback rate', () => {
+    const model = { ...usage.models[0], model: 'claude-haiku-5-5' };
+    const fallbackUsage = { ...usage, models: [model] };
+    const markup = renderToStaticMarkup(
+      createElement(ApiKeyUsageDetails, { usage: fallbackUsage, since: null, enabled: true })
+    );
+    expect(markup).not.toContain(usageText('cost_unavailable'));
+    expect(markup).toContain('claude-haiku-5-5 → claude-haiku-4-5');
+    expect(markup).toContain(
+      escapeHtml(
+        i18n.t('config_management.visual.api_keys.usage.fallback_cost', { cost: '$0.003' })
+      )
+    );
+    const summary = renderToStaticMarkup(
+      createElement(ApiKeyUsageSummary, { status: 'ready', usage: fallbackUsage })
+    );
+    expect(summary).toContain(
+      escapeHtml(
+        i18n.t('config_management.visual.api_keys.usage.fallback_cost', { cost: '$0.003' })
+      )
+    );
+  });
+
+  test('unpriced models preserve bucket costs and disclose the excluded models', () => {
+    const markup = renderToStaticMarkup(
+      createElement(ApiKeyUsageDetails, { usage, since: null, enabled: true })
+    );
+    expect(markup).toContain(
+      escapeHtml(
+        i18n.t('config_management.visual.api_keys.usage.unpriced_hint', {
+          models: 'gemini-3-pro',
+        })
+      )
+    );
+    expect(markup).toContain(
+      escapeHtml(
+        i18n.t('config_management.visual.api_keys.usage.partial_cost', { cost: '$0.0053' })
+      )
+    );
+    // Only the unpriced model's row remains unavailable, not the total or token buckets.
+    expect(markup.split(usageText('cost_unavailable'))).toHaveLength(2);
+  });
 });
 
 describe('client key usage translations', () => {
@@ -185,6 +233,8 @@ describe('API equivalent cost', () => {
       totalTokens: 14000000,
     });
     expect(cost).toEqual({
+      pricingModel: 'claude-opus-5-5',
+      fallback: false,
       input: 4,
       cached: 2,
       output: 20,
@@ -209,11 +259,78 @@ describe('API equivalent cost', () => {
     expect(cost?.reasoning).toBeCloseTo(0.7);
     expect(cost?.total).toBeCloseTo(1.89);
   });
-  test('unknown models do not produce a partial or zero-dollar total', () => {
-    expect(estimateModelCost({ ...base, model: 'custom-alias' })).toBeNull();
-    expect(
-      estimateUsageCost(normalizeClientKeyUsageReport(backendPayload).keys['sk-client-a'])
-    ).toBeNull();
+  test('unknown models preserve the priced subtotal and identify exclusions', () => {
+    const usage = normalizeClientKeyUsageReport(backendPayload).keys['sk-client-a'];
+    const cost = estimateUsageCost(usage);
+    expect(cost).toMatchObject({
+      fallbackModels: [],
+      unpricedModels: ['gemini-3-pro'],
+    });
+    const priced = estimateModelCost(base)!;
+    for (const field of [
+      'input',
+      'output',
+      'cached',
+      'reasoning',
+      'cacheWrite',
+      'cacheWriteTokens',
+      'total',
+    ] as const) {
+      expect(cost?.[field]).toBe(priced[field]);
+    }
+  });
+  test('all-unpriced or missing models remain unavailable instead of showing zero dollars', () => {
+    const usage = normalizeClientKeyUsageReport(backendPayload).keys['sk-client-a'];
+    expect(estimateUsageCost({ ...usage, models: [] })).toBeNull();
+    for (const model of ['custom-alias', 'toString', 'constructor', '__proto__']) {
+      const unknown = { ...base, model };
+      expect(estimateModelCost(unknown)).toBeNull();
+      expect(estimateUsageCost({ ...usage, models: [unknown] })).toBeNull();
+    }
+  });
+  test('unlisted Claude versions use a disclosed family rate', () => {
+    for (const [model, pricingModel] of [
+      ['claude-haiku-5-5', 'claude-haiku-4-5'],
+      ['claude-sonnet-6-1', 'claude-sonnet-5-5'],
+      ['claude-opus-6-1', 'claude-opus-5-5'],
+      [' CLAUDE-HAIKU-5-5-20261101[1m] ', 'claude-haiku-4-5'],
+    ]) {
+      const cost = estimateModelCost({ ...base, model });
+      expect(cost).toEqual({
+        ...estimateModelCost({ ...base, model: pricingModel }),
+        fallback: true,
+      });
+    }
+  });
+  test('the screenshot Haiku counters contribute to the total using fallback pricing', () => {
+    const usage = normalizeClientKeyUsageReport({
+      keys: {
+        key: {
+          models: {
+            'gpt-6.1-sol': { input_tokens: 79443399, output_tokens: 336098 },
+            'claude-opus-5-5': {
+              input_tokens: 24062,
+              output_tokens: 332536,
+              total_tokens: 68404202,
+            },
+            'claude-haiku-5-5': { input_tokens: 4, output_tokens: 571, total_tokens: 19877 },
+          },
+        },
+      },
+    }).keys.key;
+    const cost = estimateUsageCost(usage);
+    const haiku = estimateModelCost(
+      usage.models.find((model) => model.model === 'claude-haiku-5-5')!
+    );
+    expect(haiku?.cacheWriteTokens).toBe(19302);
+    expect(haiku?.total).toBeCloseTo(0.0269865);
+    expect(cost?.total).toBeCloseTo(
+      usage.models.reduce((sum, model) => sum + estimateModelCost(model)!.total, 0)
+    );
+    expect(cost?.fallbackModels).toEqual([
+      { model: 'claude-haiku-5-5', pricingModel: 'claude-haiku-4-5' },
+    ]);
+    expect(cost?.unpricedModels).toEqual([]);
   });
   test('dated Claude models use their exact family rate', () => {
     expect(estimateModelCost({ ...base, model: 'claude-opus-5-5-20261001[1m]' })?.total).toEqual(
