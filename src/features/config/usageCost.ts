@@ -4,8 +4,8 @@ import type { ClientKeyModelUsage, ClientKeyUsage } from '@/services/api';
 // https://platform.claude.com/docs/en/about-claude/pricing
 // https://developers.openai.com/api/docs/pricing
 // https://developers.openai.com/api/docs/models/gpt-5.4
-// Values are [uncached input, cache read, output]. Unknown aliases stay unpriced.
-const PRICES: Record<string, readonly [number, number, number]> = {
+// Values are [uncached input, cache read, output].
+const PRICES = {
   'claude-opus-5-5': [4, 0.2, 20],
   'claude-opus-5': [5, 0.5, 25],
   'claude-opus-4-8': [5, 0.5, 25],
@@ -27,7 +27,14 @@ const PRICES: Record<string, readonly [number, number, number]> = {
   'gpt-6.1-sol': [2, 0.1, 10],
   'gpt-6.1-terra': [1, 0.05, 5],
   'gpt-6-luna': [0.1, 0.01, 0.5],
-};
+} satisfies Record<string, readonly [number, number, number]>;
+
+// Explicit estimates for unlisted Claude versions; never present these as exact rates.
+const CLAUDE_FALLBACKS = {
+  opus: 'claude-opus-5-5',
+  sonnet: 'claude-sonnet-5-5',
+  haiku: 'claude-haiku-4-5',
+} as const;
 
 export interface UsageCost {
   input: number;
@@ -39,13 +46,30 @@ export interface UsageCost {
   total: number;
 }
 
-export function estimateModelCost(usage: ClientKeyModelUsage): UsageCost | null {
+interface ModelUsageCost extends UsageCost {
+  pricingModel: string;
+  fallback: boolean;
+}
+
+interface UsageCostEstimate extends UsageCost {
+  fallbackModels: Array<{ model: string; pricingModel: string }>;
+  unpricedModels: string[];
+}
+
+export function estimateModelCost(usage: ClientKeyModelUsage): ModelUsageCost | null {
   const model = usage.model
+    .trim()
     .toLowerCase()
     .replace(/\[1m\]$/, '')
     .replace(/-\d{8}$/, '');
-  const price = PRICES[model];
-  if (!price) return null;
+  const family = /^claude-(opus|sonnet|haiku)-\d+(?:[.-]\d+)*(?:-latest)?$/.exec(model)?.[1];
+  const pricingModel = Object.prototype.hasOwnProperty.call(PRICES, model)
+    ? (model as keyof typeof PRICES)
+    : family
+      ? CLAUDE_FALLBACKS[family as keyof typeof CLAUDE_FALLBACKS]
+      : null;
+  if (!pricingModel) return null;
+  const price = PRICES[pricingModel];
   const claude = model.startsWith('claude-');
   // The client-key endpoint retains raw counters: Claude cache reads are separate
   // from input; Codex cache reads are included. Both include reasoning in output.
@@ -62,6 +86,8 @@ export function estimateModelCost(usage: ClientKeyModelUsage): UsageCost | null 
   const reasoning = (Math.min(usage.reasoningTokens, usage.outputTokens) * price[2]) / 1e6;
   const cacheWrite = (cacheWriteTokens * price[0] * 1.25) / 1e6;
   return {
+    pricingModel,
+    fallback: pricingModel !== model,
     input,
     cached,
     output,
@@ -72,7 +98,7 @@ export function estimateModelCost(usage: ClientKeyModelUsage): UsageCost | null 
   };
 }
 
-export function estimateUsageCost(usage: ClientKeyUsage): UsageCost | null {
+export function estimateUsageCost(usage: ClientKeyUsage): UsageCostEstimate | null {
   if (usage.models.length === 0) return null;
   const total: UsageCost = {
     input: 0,
@@ -83,12 +109,19 @@ export function estimateUsageCost(usage: ClientKeyUsage): UsageCost | null {
     cacheWriteTokens: 0,
     total: 0,
   };
+  const fallbackModels: UsageCostEstimate['fallbackModels'] = [];
+  const unpricedModels: string[] = [];
   for (const model of usage.models) {
     const cost = estimateModelCost(model);
-    if (!cost) return null;
+    if (!cost) {
+      unpricedModels.push(model.model);
+      continue;
+    }
+    if (cost.fallback) fallbackModels.push({ model: model.model, pricingModel: cost.pricingModel });
     for (const key of Object.keys(total) as Array<keyof UsageCost>) total[key] += cost[key];
   }
-  return total;
+  if (unpricedModels.length === usage.models.length) return null;
+  return { ...total, fallbackModels, unpricedModels };
 }
 
 export const formatUsageCost = (value: number, locale = 'en') =>
