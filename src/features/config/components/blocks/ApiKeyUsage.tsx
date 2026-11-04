@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { ClientKeyUsage } from '@/services/api';
 import { formatCompactNumber, formatDateTimeValue } from '@/utils/format';
 import type { ClientKeyUsageStatus } from '../../hooks/useClientKeyUsage';
+import { estimateModelCost, estimateUsageCost, formatUsageCost } from '../../usageCost';
 import styles from './Blocks.module.scss';
 
 interface ApiKeyUsageSummaryProps {
@@ -9,11 +10,12 @@ interface ApiKeyUsageSummaryProps {
   usage: ClientKeyUsage | undefined;
 }
 
-/** One-line token and request count shown in an API key row. */
+/** One-line token count and estimated API cost shown in an API key row. */
 export function ApiKeyUsageSummary({ status, usage }: ApiKeyUsageSummaryProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   if (status === 'unavailable') return null;
 
+  const cost = usage ? estimateUsageCost(usage) : null;
   let text: string;
   if (status === 'loading') {
     text = t('config_management.visual.api_keys.usage.loading');
@@ -22,7 +24,9 @@ export function ApiKeyUsageSummary({ status, usage }: ApiKeyUsageSummaryProps) {
   } else {
     text = t('config_management.visual.api_keys.usage.summary', {
       tokens: formatCompactNumber(usage.totalTokens),
-      requests: formatCompactNumber(usage.requests),
+      cost: cost
+        ? formatUsageCost(cost.total, i18n.language)
+        : t('config_management.visual.api_keys.usage.cost_unavailable'),
     });
   }
   return (
@@ -44,16 +48,21 @@ export function ApiKeyUsageDetails({ usage, since, enabled }: ApiKeyUsageDetails
   const key = (name: string) => `config_management.visual.api_keys.usage.${name}`;
   const number = (value: number) => value.toLocaleString(i18n.language);
 
-  const stats: Array<{ label: string; value: number }> = usage
+  const cost = usage ? estimateUsageCost(usage) : null;
+  const money = (value: number | undefined) =>
+    value === undefined ? t(key('cost_unavailable')) : formatUsageCost(value, i18n.language);
+  const stats = usage
     ? [
-        { label: t(key('total_tokens')), value: usage.totalTokens },
-        { label: t(key('input_tokens')), value: usage.inputTokens },
-        { label: t(key('output_tokens')), value: usage.outputTokens },
-        { label: t(key('reasoning_tokens')), value: usage.reasoningTokens },
-        { label: t(key('cached_tokens')), value: usage.cachedTokens },
-        { label: t(key('requests')), value: usage.requests },
-        { label: t(key('success')), value: usage.success },
-        { label: t(key('failed')), value: usage.failed },
+        { label: t(key('total_tokens')), value: usage.totalTokens, cost: cost?.total },
+        { label: t(key('input_tokens')), value: usage.inputTokens, cost: cost?.input },
+        { label: t(key('cached_tokens')), value: usage.cachedTokens, cost: cost?.cached },
+        { label: t(key('output_tokens')), value: usage.outputTokens, cost: cost?.output },
+        { label: t(key('reasoning_tokens')), value: usage.reasoningTokens, cost: cost?.reasoning },
+        {
+          label: t(key('cache_write_tokens')),
+          value: cost?.cacheWriteTokens,
+          cost: cost?.cacheWrite,
+        },
       ]
     : [];
 
@@ -70,11 +79,17 @@ export function ApiKeyUsageDetails({ usage, since, enabled }: ApiKeyUsageDetails
         <div className={styles.emptyState}>{t(key('none'))}</div>
       ) : (
         <>
+          <div className={styles.apiKeyUsageCost}>
+            <span>{t(key('api_cost'))}</span>
+            <strong>{money(cost?.total)}</strong>
+          </div>
+          <div className="hint">{t(key('cost_hint'))}</div>
           <dl className={styles.apiKeyUsageStats}>
             {stats.map((stat) => (
               <div key={stat.label} className={styles.apiKeyUsageStat}>
                 <dt>{stat.label}</dt>
-                <dd>{number(stat.value)}</dd>
+                <dd>{stat.value === undefined ? '?' : number(stat.value)}</dd>
+                <dd className={styles.apiKeyTokenCost}>{money(stat.cost)}</dd>
               </div>
             ))}
           </dl>
@@ -90,7 +105,7 @@ export function ApiKeyUsageDetails({ usage, since, enabled }: ApiKeyUsageDetails
                 <thead>
                   <tr>
                     <th scope="col">{t(key('model'))}</th>
-                    <th scope="col">{t(key('requests'))}</th>
+                    <th scope="col">{t(key('api_cost'))}</th>
                     <th scope="col">{t(key('input_tokens'))}</th>
                     <th scope="col">{t(key('output_tokens'))}</th>
                     <th scope="col">{t(key('total_tokens'))}</th>
@@ -100,7 +115,7 @@ export function ApiKeyUsageDetails({ usage, since, enabled }: ApiKeyUsageDetails
                   {usage.models.map((model) => (
                     <tr key={model.model}>
                       <th scope="row">{model.model}</th>
-                      <td>{number(model.requests)}</td>
+                      <td>{money(estimateModelCost(model)?.total)}</td>
                       <td>{number(model.inputTokens)}</td>
                       <td>{number(model.outputTokens)}</td>
                       <td>{number(model.totalTokens)}</td>

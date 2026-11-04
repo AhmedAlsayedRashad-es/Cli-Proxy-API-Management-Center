@@ -7,6 +7,7 @@ import {
   ApiKeyUsageDetails,
   ApiKeyUsageSummary,
 } from '@/features/config/components/blocks/ApiKeyUsage';
+import { estimateModelCost, estimateUsageCost, formatUsageCost } from '@/features/config/usageCost';
 import { LANGUAGE_ORDER } from '@/utils/constants';
 
 const ZERO_TIME = '0001-01-01T00:00:00Z';
@@ -87,11 +88,13 @@ describe('normalizeClientKeyUsageReport', () => {
 describe('ApiKeyUsage components', () => {
   const usage = normalizeClientKeyUsageReport(backendPayload).keys['sk-client-a'];
 
-  test('summary shows compact token and request counts', () => {
+  test('summary shows compact tokens and API cost', () => {
     const markup = renderToStaticMarkup(
       createElement(ApiKeyUsageSummary, { status: 'ready', usage })
     );
     expect(markup).toContain('1.5K');
+    expect(markup).toContain(usageText('cost_unavailable'));
+    expect(markup).not.toContain('requests');
     expect(markup).toContain('data-usage-status="ready"');
   });
 
@@ -115,8 +118,36 @@ describe('ApiKeyUsage components', () => {
     );
     expect(markup).toContain(usageText('total_tokens'));
     expect(markup).toContain('<table');
+    expect(markup).toContain(usageText('api_cost'));
+    expect(markup).not.toContain(usageText('requests'));
+    expect(markup).not.toContain(usageText('success'));
+    expect(markup).not.toContain(usageText('failed'));
     expect(markup).toContain('gpt-5');
     expect(markup).not.toContain(usageText('disabled_hint'));
+  });
+
+  test('priced usage renders the API total and every token bucket cost', () => {
+    const model = {
+      ...usage.models[0],
+      model: 'claude-opus-5-5',
+      inputTokens: 1000000,
+      outputTokens: 1000000,
+      reasoningTokens: 250000,
+      cachedTokens: 10000000,
+      totalTokens: 14000000,
+    };
+    const pricedUsage = { ...usage, ...model, models: [model] };
+    const markup = renderToStaticMarkup(
+      createElement(ApiKeyUsageDetails, { usage: pricedUsage, since: null, enabled: true })
+    );
+    expect(markup).not.toContain(usageText('cost_unavailable'));
+    expect(markup).toContain(escapeHtml(formatUsageCost(36, i18n.language)));
+    expect(markup).toContain(usageText('cache_write_tokens'));
+    expect(markup.match(/<dt>/g)).toHaveLength(6);
+    const summary = renderToStaticMarkup(
+      createElement(ApiKeyUsageSummary, { status: 'ready', usage: pricedUsage })
+    );
+    expect(summary).toContain('$36.00');
   });
 
   test('details warn when usage statistics are disabled', () => {
@@ -138,5 +169,67 @@ describe('client key usage translations', () => {
       expect(usageKeys).toBeDefined();
       expect(Object.keys(usageKeys).sort()).toEqual(expected);
     }
+  });
+});
+
+describe('API equivalent cost', () => {
+  const base = normalizeClientKeyUsageReport(backendPayload).keys['sk-client-a'].models[0];
+  test('Claude prices cache reads separately and infers five-minute cache writes', () => {
+    const cost = estimateModelCost({
+      ...base,
+      model: 'claude-opus-5-5',
+      inputTokens: 1000000,
+      cachedTokens: 10000000,
+      outputTokens: 1000000,
+      reasoningTokens: 250000,
+      totalTokens: 14000000,
+    });
+    expect(cost).toEqual({
+      input: 4,
+      cached: 2,
+      output: 20,
+      reasoning: 5,
+      cacheWriteTokens: 2000000,
+      cacheWrite: 10,
+      total: 36,
+    });
+  });
+  test('Codex cache reads and reasoning are not charged twice', () => {
+    const cost = estimateModelCost({
+      ...base,
+      model: 'gpt-5.3-codex',
+      inputTokens: 1000000,
+      cachedTokens: 800000,
+      outputTokens: 100000,
+      reasoningTokens: 50000,
+      totalTokens: 1100000,
+    });
+    expect(cost?.input).toBeCloseTo(0.35);
+    expect(cost?.cached).toBeCloseTo(0.14);
+    expect(cost?.reasoning).toBeCloseTo(0.7);
+    expect(cost?.total).toBeCloseTo(1.89);
+  });
+  test('unknown models do not produce a partial or zero-dollar total', () => {
+    expect(estimateModelCost({ ...base, model: 'custom-alias' })).toBeNull();
+    expect(
+      estimateUsageCost(normalizeClientKeyUsageReport(backendPayload).keys['sk-client-a'])
+    ).toBeNull();
+  });
+  test('dated Claude models use their exact family rate', () => {
+    expect(estimateModelCost({ ...base, model: 'claude-opus-5-5-20261001[1m]' })?.total).toEqual(
+      estimateModelCost({ ...base, model: 'claude-opus-5-5' })?.total
+    );
+    expect(estimateModelCost({ ...base, model: 'claude-opus-5-5-custom' })).toBeNull();
+  });
+  test('mixed supported models sum costs and small costs remain visible', () => {
+    const models = ['claude-opus-5-5', 'gpt-5.3-codex'].map((model) => ({ ...base, model }));
+    const cost = estimateUsageCost({
+      ...normalizeClientKeyUsageReport(backendPayload).keys['sk-client-a'],
+      models,
+    });
+    expect(cost?.total).toBeCloseTo(
+      models.reduce((sum, model) => sum + estimateModelCost(model)!.total, 0)
+    );
+    expect(formatUsageCost(0.001)).toBe('$0.001');
   });
 });

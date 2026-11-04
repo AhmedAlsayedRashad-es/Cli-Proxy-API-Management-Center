@@ -237,7 +237,7 @@
 
 .apiKeyUsageStats {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
   margin: 0;
 
@@ -253,6 +253,29 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
+}
+
+.apiKeyUsageCost {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+
+  strong {
+    font-size: 28px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.apiKeyUsageStats dd.apiKeyTokenCost {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .apiKeyUsageStat {
