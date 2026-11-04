@@ -159,6 +159,26 @@ describe('routing board rendering', () => {
     expect(html).toContain('Requests are split across the tier by weight.');
   });
 
+  test('soonest reset first is selectable and explains runtime ordering', async () => {
+    await i18n.changeLanguage('en');
+    const html = renderToStaticMarkup(
+      createElement(PolicyPanel, {
+        settings: {
+          strategy: 'soonest-reset-first',
+          sessionAffinity: false,
+          requestRetry: 3,
+          maxRetryCredentials: 0,
+        },
+        onChange: () => {},
+      })
+    );
+    expect(html.match(/role="radio"/g)).toHaveLength(4);
+    expect(html).toMatch(
+      /role="radio" aria-checked="true" tabindex="0"[^>]*>.*Soonest reset first/
+    );
+    expect(html).toContain('Unknown resets come last.');
+  });
+
   test('styles respect reduced motion and the route is registered behind navigation', () => {
     const page = readFileSync('src/features/routing/RoutingPage.module.scss', 'utf8');
     const card = readFileSync('src/features/routing/components/MemberCard.module.scss', 'utf8');

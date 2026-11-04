@@ -99,6 +99,22 @@ describe('routing board reading', () => {
     expect(readRoutingSettings({ routing: { strategy: 'bogus' } }).strategy).toBe('round-robin');
   });
 
+  test.each(['soonest-reset-first', 'soonestresetfirst', 'srf'])(
+    'reads and preserves %s when saving routing settings',
+    (strategy) => {
+      const raw = { ...RAW, routing: { ...RAW.routing, strategy } };
+      const current = buildRoutingBoard(raw, FILES);
+      expect(current.settings.strategy).toBe('soonest-reset-first');
+      const original = board();
+      const draft = draftFromBoard(original);
+      draft.settings = { ...draft.settings, strategy: current.settings.strategy };
+      const plan = buildRoutingPlan(original, draft);
+      expect(buildRoutingConfigPatch(RAW, original, plan)).toEqual({
+        routing: { strategy: 'soonest-reset-first' },
+      });
+    }
+  );
+
   test('expands groups with key overrides, compat providers and credentials', () => {
     const members = board().members;
     const byKey = new Map(members.map((member) => [member.key, member]));
@@ -388,10 +404,10 @@ describe('route preview', () => {
     expect(loading.tiers[0].members[0].state).toBe('unknown');
   });
 
-  test('fill-first has no fixed split', () => {
+  test.each(['fill-first', 'soonest-reset-first'] as const)('%s has no fixed split', (strategy) => {
     const current = board();
     const draft = draftFromBoard(current);
-    draft.settings = { ...draft.settings, strategy: 'fill-first' };
+    draft.settings = { ...draft.settings, strategy };
     const preview = resolveRoute(current, draft, catalog, null, 0);
     expect(preview.tiers[0].state).toBe('active');
     expect(preview.tiers[0].members[0].share).toBeNull();

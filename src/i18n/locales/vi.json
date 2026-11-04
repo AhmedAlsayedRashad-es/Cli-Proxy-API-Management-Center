@@ -219,7 +219,8 @@
     "ws_auth_enable": "Yêu cầu xác thực cho /ws/*",
     "routing_strategy_round_robin": "round-robin (luân phiên)",
     "routing_strategy_weighted_round_robin": "weighted-round-robin (luân phiên có trọng số)",
-    "routing_strategy_fill_first": "fill-first (ưu tiên lấp đầy)"
+    "routing_strategy_fill_first": "fill-first (ưu tiên lấp đầy)",
+    "routing_strategy_soonest_reset_first": "soonest-reset-first (Ưu tiên đặt lại sớm nhất)"
   },
   "auth_files": {
     "title": "Quản lý File xác thực",
@@ -1235,6 +1236,7 @@
           "strategy_round_robin": "Round Robin",
           "strategy_weighted_round_robin": "Weighted Round Robin",
           "strategy_fill_first": "Fill First",
+          "strategy_soonest_reset_first": "Ưu tiên đặt lại sớm nhất",
           "session_affinity_ttl": "TTL Session Affinity",
           "force_model_prefix": "Bắt buộc tiền tố model",
           "force_model_prefix_desc": "Yêu cầu model không có tiền tố chỉ dùng credential không có tiền tố",
@@ -1677,9 +1679,11 @@
     "strategy_round_robin": "Xoay vòng",
     "strategy_weighted_round_robin": "Xoay vòng có trọng số",
     "strategy_fill_first": "Lấp đầy trước",
+    "strategy_soonest_reset_first": "Ưu tiên đặt lại sớm nhất",
     "strategy_round_robin_desc": "Mỗi thông tin xác thực trong tầng lần lượt nhận yêu cầu.",
     "strategy_weighted_round_robin_desc": "Yêu cầu được chia trong tầng theo trọng số.",
     "strategy_fill_first_desc": "Một thông tin xác thực nhận hết cho đến khi không khả dụng, rồi đến cái tiếp theo.",
+    "strategy_soonest_reset_first_desc": "Dùng thông tin xác thực có thời gian đặt lại hạn ngạch gần nhất trong cùng tầng. Thời gian không xác định được xếp cuối.",
     "affinity_label": "Gắn phiên",
     "affinity_desc": "Yêu cầu của cùng một phiên đi tới cùng một thông tin xác thực, tự chuyển khi nó không khả dụng.",
     "retry_label": "Chuyển đổi dự phòng",
